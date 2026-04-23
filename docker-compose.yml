@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  database:
+    image: akshat8630/database:latest
+    container_name: database
+    cap_add:
+      - NET_ADMIN
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: devops
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+    volumes:
+      - mysql-data:/var/lib/mysql #stores DB data permanently
+      - ./message.sql:/docker-entrypoint-initdb.d/message.sql   #initializes schema/data only on first container startup.
+    networks:
+      - app-net
+    
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  flask-app:
+    image: akshat8630/broadcast-text:latest
+    container_name: flask-app
+    ports:
+      - "5000:5000"
+    environment:
+      MYSQL_HOST: database
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+      MYSQL_DB: devops
+    depends_on:
+      database:
+        condition: service_healthy   # wait until DB is healthy
+    cap_add:
+      - NET_ADMIN   
+    networks:
+      - app-net
+    restart: always
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "5000"] 
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  app-net:
+
+volumes:
+  mysql-data:
