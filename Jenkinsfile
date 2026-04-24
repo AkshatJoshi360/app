@@ -1,68 +1,65 @@
-pipeline{
+pipeline {
 
-    agent {label "Dev1"};
+    agent any
 
-    stages{
-        stage("code"){
-            steps{
-                git url : "https://github.com/AkshatJoshi-18/broadcast-text", branch : "master"
-                echo "clone done ...."
-            }
-        }
-        
-        stage("build"){
-            steps{
-                sh "docker build -t akshat8630/broadcast-text:latest -f Dockerfile-multistage ."
-                sh "docker build -t akshat8630/database:latest -f Dockerfile-mysql ."
-                echo "build done ...."
-            }
-        }
-
-        stage("docker hub"){
-            steps{ withCredentials([usernamePassword(
-                credentialsId : "dockerHub",
-                passwordVariable : "dockerHubPass",
-                usernameVariable : "dockerHubUser"
-                )]){
-                    sh "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPass}"
-                    sh "docker image push ${env.dockerHubUser}/broadcast-text:latest"
-                    sh "docker image push ${env.dockerHubUser}/database:latest"
-                }
-            }
-        }
-
-        stage("test"){
-            steps{
-                echo "testing done ...."
-            }
-        }
-
-        stage("deploy"){
-            steps{
-                sh "docker system prune"
-                sh "docker image prune -f"
-                sh "free -h"
-                sh "docker compose down "
-                sh "docker compose up -d --build flask-app"
-                echo "deploy done ...."
-            }
-        }
-        
+    environment {
+        IMAGE_NAME = "akshat8630/app"
     }
 
-    post{
-        success{
+    stages {
+
+        stage("Clone Code") {
+            steps {
+                git url: "https://github.com/AkshatJoshi360/app.git", branch: "main"
+                echo "Clone done ✅"
+            }
+        }
+
+        stage("Build Docker Image") {
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:latest ."
+                echo "Build done ✅"
+            }
+        }
+
+        stage("Push to Docker Hub") {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "dockerHub",
+                    usernameVariable: "DOCKER_USER",
+                    passwordVariable: "DOCKER_PASS"
+                )]) {
+                    sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                    sh "docker push ${IMAGE_NAME}:latest"
+                }
+                echo "Pushed to DockerHub ✅"
+            }
+        }
+
+        stage("Deploy") {
+            steps {
+                sh "docker system prune -f"
+                sh "docker container stop app || true"
+                sh "docker container rm app || true"
+                sh "docker run -d -p 8080:8080 --name app ${IMAGE_NAME}:latest"
+                echo "Deployment done ✅"
+            }
+        }
+    }
+
+    post {
+        success {
             emailext(
-                to : 'akshatjoshi86302@gmail.com',
-                subject : "Build Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body : "Good news! Build was successful.\n\nCheck it here: ${env.BUILD_URL}"
+                to: 'akshatjoshi86302@gmail.com',
+                subject: "✅ Build Success: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Build successful 🚀\n${env.BUILD_URL}"
             )
         }
-        failure{
+        failure {
             emailext(
-                to : 'akshatjoshi86302@gmail.com',
-                subject : "❌❌Build Failed❌❌: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body : "Bad news! Build was failed.\n\nCheck it here: ${env.BUILD_URL}"
+                to: 'akshatjoshi86302@gmail.com',
+                subject: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Build failed ⚠️\n${env.BUILD_URL}"
             )
         }
     }
